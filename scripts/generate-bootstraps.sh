@@ -59,15 +59,41 @@ read_package_list_deb() {
 	for architecture in all "$1"; do
 		if [ ! -e "${BOOTSTRAP_TMPDIR}/packages.${architecture}" ]; then
 			echo "[*] Downloading package list for architecture '${architecture}'..."
-			if ! curl --fail --location \
-				--output "${BOOTSTRAP_TMPDIR}/packages.${architecture}" \
-				"${REPO_BASE_URL}/dists/stable/main/binary-${architecture}/Packages"; then
+			local packages_url="${REPO_BASE_URL}/dists/stable/main/binary-${architecture}/Packages"
+			local packages_xz_url="${REPO_BASE_URL}/dists/stable/main/binary-${architecture}/Packages.xz"
+			local tmp_out="${BOOTSTRAP_TMPDIR}/packages.${architecture}"
+
+			if curl --fail --location --output "$tmp_out" "$packages_url" 2>/dev/null; then
+				: # plain Packages downloaded
+			elif curl --fail --location --output "${tmp_out}.xz" "$packages_xz_url" 2>/dev/null; then
+				xz -d "${tmp_out}.xz"
+			else
 				if [ "$architecture" = "all" ]; then
 					echo "[!] Skipping architecture-independent package list as not available..."
 					continue
+				else
+					echo "[!] Failed to download package list for '${architecture}' from:"
+					echo "    $packages_url"
+					echo "    $packages_xz_url"
+					echo "[!] The repository appears to be empty or unreachable."
+					echo "[!] Seed the server first by running the seed-repository workflow."
+					exit 1
 				fi
 			fi
-			echo >> "${BOOTSTRAP_TMPDIR}/packages.${architecture}"
+
+			# Fail fast if the Packages file is empty (server seeded but no packages uploaded yet)
+			if [ ! -s "$tmp_out" ]; then
+				if [ "$architecture" = "all" ]; then
+					echo "[!] Skipping empty architecture-independent package list..."
+					continue
+				else
+					echo "[!] Package list for '${architecture}' is empty — the repository has no packages."
+					echo "[!] Seed the server first by running the seed-repository workflow."
+					exit 1
+				fi
+			fi
+
+			echo >> "$tmp_out"
 		fi
 
 		echo "[*] Reading package list for '${architecture}'..."

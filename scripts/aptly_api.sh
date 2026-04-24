@@ -132,7 +132,7 @@ aptly_publish_repo() {
       --max-time 300 \
       --header 'Content-Type: application/json' \
       --request PUT \
-      --data "{\"Signing\": {\"Passphrase\": \"${GPG_PASSPHRASE}\"}}" \
+      --data "{\"Signing\": {\"Passphrase\": \"${GPG_PASSPHRASE}\", \"Batch\": true}}" \
       ${REPOSITORY_URL}/publish/${REPOSITORY_NAME}/${REPOSITORY_DISTRIBUTION} || true
   )
   http_status_code=$(echo "$curl_response" | cut -d'|' -f2 | grep -oP '\d{3}$')
@@ -141,15 +141,47 @@ aptly_publish_repo() {
     echo "[$(date +%H:%M:%S)] Repository has been updated successfully."
   elif [ "$http_status_code" = "000" ]; then
     echo "[$(date +%H:%M:%S)] Warning: server/proxy has dropped connection."
-    # Ignore - nothing can be done with that unless we change proxy.
-    # return 1
   elif [ "$http_status_code" = "504" ]; then
     echo "[$(date +%H:%M:%S)] Warning: request processing time was too long, connection dropped."
-    # Ignore - nothing can be done with that unless we change repository
-    # management tool or reduce repository size.
-    # return 1
+  elif [ "$http_status_code" = "404" ]; then
+    echo "[$(date +%H:%M:%S)] Repo not yet published; creating initial publish endpoint..."
+    aptly_init_publish_repo
   else
     echo "[$(date +%H:%M:%S)] Error: got http_status_code == '$http_status_code'"
+    return 1
+  fi
+  return 0
+}
+
+# Creates the published repo for the first time (POST instead of PUT).
+# Called automatically by aptly_publish_repo when the endpoint does not exist yet.
+aptly_init_publish_repo() {
+  ! check_login && return 0
+  echo "[$(date +%H:%M:%S)] Initializing publish for '${REPOSITORY_NAME}' / '${REPOSITORY_DISTRIBUTION}'..."
+  curl_response=$(
+    curl \
+      "${CURL_COMMON_OPTIONS[@]}" "${CURL_ADDITIONAL_OPTIONS[@]}" \
+      --max-time 300 \
+      --header 'Content-Type: application/json' \
+      --request POST \
+      --data "{
+        \"SourceKind\": \"local\",
+        \"Sources\": [{\"Name\": \"${REPOSITORY_NAME}\"}],
+        \"Distribution\": \"${REPOSITORY_DISTRIBUTION}\",
+        \"Architectures\": [\"aarch64\", \"arm\"],
+        \"Signing\": {\"Passphrase\": \"${GPG_PASSPHRASE}\", \"Batch\": true}
+      }" \
+      ${REPOSITORY_URL}/publish/${REPOSITORY_NAME} || true
+  )
+  http_status_code=$(echo "$curl_response" | cut -d'|' -f2 | grep -oP '\d{3}$')
+
+  if [ "$http_status_code" = "201" ]; then
+    echo "[$(date +%H:%M:%S)] Publish endpoint created successfully."
+  elif [ "$http_status_code" = "000" ]; then
+    echo "[$(date +%H:%M:%S)] Warning: server/proxy has dropped connection."
+  else
+    echo "[$(date +%H:%M:%S)] Error: failed to create publish endpoint (HTTP $http_status_code)."
+    echo "$curl_response" | cut -d'|' -f1
     return 1
   fi
   return 0

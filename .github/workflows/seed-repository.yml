@@ -32,6 +32,7 @@ jobs:
 
       - name: Seed packages from Termux CDN
         env:
+          REPOSITORY_URL: https://packagesyatonorai.duckdns.org/aptly-api
           APTLY_API_AUTH: ${{ secrets.APTLY_API_AUTH }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
           ARCH: ${{ matrix.arch }}
