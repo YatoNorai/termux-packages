@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       packages:
-        description: "A space-separated names of packages selected for rebuilding"
+        description: "Space-separated package names to rebuild, or 'all' to rebuild every package"
         required: true
       free-space:
         description: "Free space even if not building large package (useful when building a large number of packages)"
@@ -114,25 +114,39 @@ jobs:
             done<<<${CHANGED_FILES}
           done
         else
-          read -a PACKAGES <<< "${MANUAL_INPUT_PACKAGES//$'\n'/ }"
-          for pkg in "${PACKAGES[@]}"; do
-            repo_paths=$(jq --raw-output 'del(.pkg_format) | keys | .[]' repo.json)
-            found=false
-            for repo_path in $repo_paths; do
+          # Special keyword "all": queue every package in every repo
+          if [ "${MANUAL_INPUT_PACKAGES// /}" = "all" ]; then
+            for repo_path in $(jq --raw-output 'del(.pkg_format) | keys | .[]' repo.json); do
               repo=$(jq --raw-output '.["'${repo_path}'"].name' repo.json)
-              if [ -d "${repo_path}/${pkg}" ]; then
-                found=true
+              for pkg_dir in "${repo_path}"/*/; do
+                pkg=$(basename "$pkg_dir")
                 echo "$pkg" >> ./built_${repo}_packages.txt
                 for subpkg in $(find "${repo_path}/${pkg}/" -maxdepth 1 -type f -name \*.subpackage.sh | sort); do
                   echo "$(basename "${subpkg%%.subpackage.sh}")" >> ./built_${repo}_subpackages.txt
                 done
+              done
+            done
+          else
+            read -a PACKAGES <<< "${MANUAL_INPUT_PACKAGES//$'\n'/ }"
+            for pkg in "${PACKAGES[@]}"; do
+              repo_paths=$(jq --raw-output 'del(.pkg_format) | keys | .[]' repo.json)
+              found=false
+              for repo_path in $repo_paths; do
+                repo=$(jq --raw-output '.["'${repo_path}'"].name' repo.json)
+                if [ -d "${repo_path}/${pkg}" ]; then
+                  found=true
+                  echo "$pkg" >> ./built_${repo}_packages.txt
+                  for subpkg in $(find "${repo_path}/${pkg}/" -maxdepth 1 -type f -name \*.subpackage.sh | sort); do
+                    echo "$(basename "${subpkg%%.subpackage.sh}")" >> ./built_${repo}_subpackages.txt
+                  done
+                fi
+              done
+              if [ "$found" != true ]; then
+                echo "Package '${pkg}' not found in any of the repo"
+                exit 1
               fi
             done
-            if [ "$found" != true ]; then
-              echo "Package '${pkg}' not found in any of the repo"
-              exit 1
-            fi
-          done
+          fi
         fi
 
         for repo in $(jq --raw-output 'del(.pkg_format) | .[].name' repo.json); do
