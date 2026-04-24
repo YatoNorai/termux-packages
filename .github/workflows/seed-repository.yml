@@ -1,16 +1,17 @@
 name: Seed APT Repository from Termux CDN
 
-# Mirrors all packages from the official Termux CDN to our server,
-# then rebuilds our customized packages on top.
-# Run this ONCE to populate an empty server before generating bootstrap.
+# WARNING: NÃO USE ESTE WORKFLOW.
+# Os pacotes do CDN oficial do Termux têm com.termux hardcoded nos binários.
+# Este app usa com.layer.ide — instalar pacotes do CDN vai quebrar o app.
+# Compile tudo do zero usando o workflow "Packages" com o campo packages=all.
 
 on:
   workflow_dispatch:
     inputs:
       repos:
-        description: "Repos to seed: main, root, x11, or 'all'"
+        description: "AVISO: pacotes do CDN têm com.termux e são INCOMPATÍVEIS. Repos: main, root, x11, ou 'all'"
         required: true
-        default: "all"
+        default: "DO-NOT-USE"
 
 permissions: {}
 
