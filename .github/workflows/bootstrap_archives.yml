@@ -14,38 +14,38 @@ concurrency:
 jobs:
   build:
     permissions:
-      contents: read # actions/upload-artifact doesn't need contents: write
-    runs-on: ubuntu-slim
+      contents: read
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         arch:
           - aarch64
           - arm
-          - i686
-          - x86_64
-    if: github.repository == 'termux/termux-packages'
+    if: github.repository == 'YatoNorai/termux-packages'
     steps:
       - name: Git clone
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
       - name: Create bootstrap archive
         run: ./scripts/generate-bootstraps.sh --architectures ${{ matrix.arch }}
       - name: Store artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: bootstrap-archives-${{ matrix.arch }}-${{ github.sha }}
-          path: "*.zip"
+          path: "*.zip*"
+
   publish:
     permissions:
-      contents: write # for git push
+      contents: write
     needs: build
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-24.04
+    if: github.repository == 'YatoNorai/termux-packages'
     steps:
       - name: Git clone
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Fetch bootstrap archives
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v4
         with:
           merge-multiple: true
           path: ./
@@ -61,11 +61,13 @@ jobs:
           fi
           new_tag="${new_tag}-r${tag_rev}+apt.android-7"
           echo "tag_name=$new_tag" >> $GITHUB_OUTPUT
-      - name: Publish bootstrap zips to GitHub release
+      - name: Publish bootstrap archives to GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create ${{ steps.get_tag.outputs.tag_name }} --title "Bootstrap archives for Termux application (apt.android-7)"
-          for file in *.zip; do
-            gh release upload ${{ steps.get_tag.outputs.tag_name }} "$file"
+          gh release create ${{ steps.get_tag.outputs.tag_name }} \
+            --title "Bootstrap archives for Layer IDE Terminal (apt.android-7)" \
+            --repo YatoNorai/termux-packages
+          for file in *.zip *.zip.9; do
+            [ -f "$file" ] && gh release upload ${{ steps.get_tag.outputs.tag_name }} "$file" --repo YatoNorai/termux-packages
           done
