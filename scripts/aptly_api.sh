@@ -89,6 +89,35 @@ aptly_upload_file() {
   return 0
 }
 
+# Creates the aptly local repo on the server if it does not exist yet.
+# Safe to call even when the repo already exists (returns 0 in both cases).
+aptly_ensure_repo_exists() {
+  ! check_login && return 0
+  echo "[$(date +%H:%M:%S)] Ensuring local repo '${REPOSITORY_NAME}' exists..."
+  curl_response=$(
+    curl \
+      "${CURL_COMMON_OPTIONS[@]}" "${CURL_ADDITIONAL_OPTIONS[@]}" \
+      --header 'Content-Type: application/json' \
+      --request POST \
+      --data "{
+        \"Name\": \"${REPOSITORY_NAME}\",
+        \"DefaultDistribution\": \"${REPOSITORY_DISTRIBUTION}\",
+        \"DefaultComponent\": \"main\"
+      }" \
+      ${REPOSITORY_URL}/repos || true
+  )
+  http_status_code=$(echo "$curl_response" | cut -d'|' -f2 | grep -oP '\d{3}$')
+
+  if [ "$http_status_code" = "201" ]; then
+    echo "[$(date +%H:%M:%S)] Repo '${REPOSITORY_NAME}' created."
+  elif [ "$http_status_code" = "400" ]; then
+    echo "[$(date +%H:%M:%S)] Repo '${REPOSITORY_NAME}' already exists — OK."
+  else
+    echo "[$(date +%H:%M:%S)] Warning: unexpected status $http_status_code when ensuring repo exists."
+  fi
+  return 0
+}
+
 aptly_add_to_repo() {
   ! check_login && return 0
   echo "[$(date +%H:%M:%S)] Adding packages to repository '$REPOSITORY_NAME'..."

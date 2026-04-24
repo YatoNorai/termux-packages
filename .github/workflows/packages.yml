@@ -326,6 +326,8 @@ jobs:
           export REPOSITORY_NAME=$(jq --raw-output '.["'$repo'"].name' repo.json)
           export REPOSITORY_DISTRIBUTION=$(jq --raw-output '.["'$repo'"].distribution' repo.json)
 
+          aptly_ensure_repo_exists
+
           uploaded_files=false
           shopt -s nullglob
 

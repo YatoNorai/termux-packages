@@ -1,0 +1,51 @@
+name: Sync x11-packages from termux-x11-packages
+
+# Fetches the latest packages from termux/termux-x11-packages and
+# copies them into x11-packages/ of this repo, then commits the result.
+# Run this once (or whenever you want to pull upstream x11 updates).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
+          fetch-depth: 1
+
+      - name: Clone termux-x11-packages
+        run: |
+          git clone --depth=1 https://github.com/termux/termux-x11-packages /tmp/termux-x11-packages
+
+      - name: Replace x11-packages/ with upstream content
+        run: |
+          rm -rf x11-packages/
+          mkdir -p x11-packages
+          # The x11 repo keeps its packages in packages/ at the root
+          if [ -d /tmp/termux-x11-packages/packages ]; then
+            cp -r /tmp/termux-x11-packages/packages/. x11-packages/
+          else
+            # Fallback: some versions put packages at the root
+            cp -r /tmp/termux-x11-packages/. x11-packages/
+            rm -rf x11-packages/.git x11-packages/.github
+          fi
+
+      - name: Commit and push
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add x11-packages/
+          if git diff --staged --quiet; then
+            echo "No changes — x11-packages is already up to date."
+          else
+            UPSTREAM_SHA=$(git -C /tmp/termux-x11-packages rev-parse --short HEAD)
+            git commit -m "sync: update x11-packages from termux/termux-x11-packages@${UPSTREAM_SHA}"
+            git push origin layer-ide-main
+          fi

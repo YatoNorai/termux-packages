@@ -87,6 +87,7 @@ jobs:
 
             echo "=== Uploading $repo_name ($ARCH) to our server ==="
             GITHUB_SHA="${repo_name}-${ARCH}-$(date +%s)"
+            aptly_ensure_repo_exists || true
             for deb in debs/${repo_name}_${ARCH}/*.deb; do
               [ -f "$deb" ] || continue
               aptly_upload_file "$deb" || true
