@@ -80,6 +80,7 @@ termux_step_post_make_install() {
 	( # Remove duplicated binaries in bin/ with symlink to the one in libexec/git-core:
 		cd "$TERMUX_PREFIX/bin"
 		ln -sf ../libexec/git-core/git git
+		ln -sf ../libexec/git-core/scalar scalar
 		ln -sf ../libexec/git-core/git-upload-pack git-upload-pack
 		cd "$TERMUX_PREFIX/libexec/git-core"
 		ln -sf git-gui git-citool

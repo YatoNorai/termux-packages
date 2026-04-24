@@ -7,7 +7,7 @@ TERMUX_PKG_REVISION=2
 TERMUX_PKG_SRCURL=https://nlnetlabs.nl/downloads/unbound/unbound-${TERMUX_PKG_VERSION}.tar.gz
 TERMUX_PKG_SHA256=44e7b53e008a6dcaec03032769a212b46ab5c23c105284aa05a4f3af78e59cdb
 TERMUX_PKG_AUTO_UPDATE=true
-TERMUX_PKG_DEPENDS="libevent, libnghttp2, libngtcp2, openssl, resolv-conf"
+TERMUX_PKG_DEPENDS="libandroid-shmem, libevent, libnghttp2, libngtcp2, openssl, resolv-conf"
 TERMUX_PKG_BUILD_DEPENDS="python, swig"
 TERMUX_PKG_BREAKS="unbound (<< 1.17.1-1)"
 TERMUX_PKG_REPLACES="unbound (<< 1.17.1-1)"
@@ -36,6 +36,10 @@ ac_cv_func_getpwnam=no
 --with-pidfile=$TERMUX_PREFIX/var/run/unbound.pid
 --with-username=
 "
+
+termux_step_pre_configure() {
+	LDFLAGS+=" -landroid-shmem "
+}
 
 termux_step_post_massage() {
 	mkdir -p "$TERMUX_PKG_MASSAGEDIR/$TERMUX_PREFIX/var/run"

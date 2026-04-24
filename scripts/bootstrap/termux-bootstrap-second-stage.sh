@@ -141,6 +141,9 @@ run_bootstrap_second_stage_inner() {
 
 	local return_value
 
+	# Configure APT mirror first - must not depend on postinst success.
+	configure_apt_mirror
+
 	log "Running postinst maintainer scripts"
 	run_package_postinst_maintainer_scripts
 	return_value=$?
@@ -151,6 +154,34 @@ run_bootstrap_second_stage_inner() {
 
 	return 0
 
+}
+
+configure_apt_mirror() {
+	local repo_url="https://packagesyatonorai.duckdns.org/apt/termux-main"
+	local apt_sources="$TERMUX_PREFIX/etc/apt/sources.list"
+	local mirror_dir="$TERMUX_PREFIX/etc/termux/mirrors"
+	local mirror_file="$mirror_dir/default"
+	local chosen="$TERMUX_PREFIX/etc/termux/chosen_mirrors"
+	local pkg_bin="$TERMUX_PREFIX/bin/pkg"
+
+	# Write sources.list so apt works regardless of mirror selection state.
+	echo "deb $repo_url stable main" > "$apt_sources"
+
+	# Create mirrors/default in the format pkg expects (MAIN="url") and
+	# symlink chosen_mirrors so pkg takes the "single mirror selected" path,
+	# avoiding find commands on non-existent regional dirs.
+	mkdir -p "$mirror_dir"
+	{ echo "WEIGHT=10"; echo "MAIN=\"$repo_url\""; } > "$mirror_file"
+	ln -sf "$mirror_file" "$chosen"
+
+	# Belt-and-suspenders: remove the warning echo and regional find commands
+	# from the compiled pkg binary in case chosen_mirrors is not honoured.
+	if [ -f "$pkg_bin" ]; then
+		sed -i '/No mirror or mirror group selected/d' "$pkg_bin"
+		sed -i '/find.*{asia,chinese_mainland,europe,north_america,oceania,russia}/d' "$pkg_bin"
+	fi
+
+	return 0
 }
 
 run_package_postinst_maintainer_scripts() {

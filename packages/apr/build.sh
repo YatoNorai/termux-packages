@@ -8,7 +8,7 @@ TERMUX_PKG_REVISION=2
 TERMUX_PKG_SRCURL=https://archive.apache.org/dist/apr/apr-${TERMUX_PKG_VERSION}.tar.bz2
 TERMUX_PKG_SHA256=49030d92d2575da735791b496dc322f3ce5cff9494779ba8cc28c7f46c5deb32
 TERMUX_PKG_AUTO_UPDATE=true
-TERMUX_PKG_DEPENDS="libuuid"
+TERMUX_PKG_DEPENDS="libuuid, libandroid-shmem"
 # libcrypt build-dependency is needed to build apache2.
 TERMUX_PKG_BUILD_DEPENDS="libcrypt"
 TERMUX_PKG_BREAKS="apr-dev"
@@ -53,6 +53,10 @@ termux_step_post_get_source() {
 	if [ "${v}" != "${_SOVERSION}" ]; then
 		termux_error_exit "SOVERSION guard check failed."
 	fi
+}
+
+termux_step_pre_config() {
+	LDFLAGS+=" -landroid-shmem "
 }
 
 termux_step_post_configure() {
