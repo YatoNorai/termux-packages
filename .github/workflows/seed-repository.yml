@@ -1,0 +1,99 @@
+name: Seed APT Repository from Termux CDN
+
+# Mirrors all packages from the official Termux CDN to our server,
+# then rebuilds our customized packages on top.
+# Run this ONCE to populate an empty server before generating bootstrap.
+
+on:
+  workflow_dispatch:
+    inputs:
+      repos:
+        description: "Repos to seed: main, root, x11, or 'all'"
+        required: true
+        default: "all"
+
+permissions: {}
+
+jobs:
+  seed:
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        arch: [aarch64, arm]
+      fail-fast: false
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+
+      - name: Install tools
+        run: sudo apt-get install -y aptly xz-utils bzip2
+
+      - name: Seed packages from Termux CDN
+        env:
+          APTLY_API_AUTH: ${{ secrets.APTLY_API_AUTH }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          ARCH: ${{ matrix.arch }}
+          INPUT_REPOS: ${{ github.event.inputs.repos }}
+        run: |
+          source scripts/aptly_api.sh
+
+          declare -A OFFICIAL=(
+            ["termux-main"]="https://packages-cf.termux.dev/apt/termux-main|stable|main"
+            ["termux-root"]="https://packages-cf.termux.dev/apt/termux-root|root|stable"
+            ["termux-x11"]="https://packages-cf.termux.dev/apt/termux-x11|x11|main"
+          )
+
+          declare -A OUR=(
+            ["termux-main"]="stable"
+            ["termux-root"]="root"
+            ["termux-x11"]="x11"
+          )
+
+          mkdir -p debs
+
+          for repo_name in "${!OFFICIAL[@]}"; do
+            # Filter by input
+            if [[ "$INPUT_REPOS" != "all" && "$INPUT_REPOS" != "$repo_name" ]]; then
+              continue
+            fi
+
+            IFS='|' read -r base_url distribution component <<< "${OFFICIAL[$repo_name]}"
+            REPOSITORY_NAME="$repo_name"
+            REPOSITORY_DISTRIBUTION="${OUR[$repo_name]}"
+
+            echo "=== Seeding $repo_name ($ARCH) from $base_url ==="
+
+            packages_url="$base_url/dists/$distribution/$component/binary-$ARCH/Packages.xz"
+            echo "Fetching package list: $packages_url"
+            curl -fsSL "$packages_url" | xz -d > /tmp/Packages_${repo_name}_${ARCH} || {
+              # Try .bz2 fallback
+              curl -fsSL "$base_url/dists/$distribution/$component/binary-$ARCH/Packages.bz2" \
+                | bzip2 -d > /tmp/Packages_${repo_name}_${ARCH}
+            }
+
+            # Parse each package entry and download .deb
+            mkdir -p "debs/${repo_name}_${ARCH}"
+            awk '/^Filename:/{print $2}' /tmp/Packages_${repo_name}_${ARCH} | while read -r filename; do
+              deb_url="$base_url/$filename"
+              deb_file="debs/${repo_name}_${ARCH}/$(basename "$filename")"
+              if [ ! -f "$deb_file" ]; then
+                echo "  Downloading $(basename "$filename")"
+                curl -fsSL --retry 3 -o "$deb_file" "$deb_url" || echo "  WARNING: failed $deb_file"
+              fi
+            done
+
+            echo "=== Uploading $repo_name ($ARCH) to our server ==="
+            GITHUB_SHA="${repo_name}-${ARCH}-$(date +%s)"
+            for deb in debs/${repo_name}_${ARCH}/*.deb; do
+              [ -f "$deb" ] || continue
+              aptly_upload_file "$deb" || true
+            done
+
+            aptly_add_to_repo || true
+            aptly_delete_dir || true
+            aptly_publish_repo || true
+
+            echo "=== Done $repo_name ($ARCH) ==="
+          done
