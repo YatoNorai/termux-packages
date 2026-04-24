@@ -34,7 +34,7 @@ jobs:
       - name: Build command-not-found
         run: |
           mkdir -p debs
-          ./scripts/run-docker.sh -d ./build-package.sh -I -C \
+          ./scripts/run-docker.sh -d ./build-package.sh \
             -a "${{ matrix.target_arch }}" \
             command-not-found
 

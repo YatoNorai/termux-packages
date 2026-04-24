@@ -253,7 +253,7 @@ jobs:
         echo "packages: ${packages[*]}"
 
         if [[ "${#packages[@]}" -gt 0 ]]; then
-          ./scripts/run-docker.sh -d ./build-package.sh -I -C -a "${{ matrix.target_arch }}" "${packages[@]}"
+          ./scripts/run-docker.sh -d ./build-package.sh -a "${{ matrix.target_arch }}" "${packages[@]}"
         fi
 
     - name: Generate build artifacts
@@ -269,7 +269,7 @@ jobs:
 
           if [ -f "./debs/built_${repo}_packages.txt" ] && [ -d "output" ]; then
             while read -r pkg; do
-              find output \( -name "$pkg_*.deb" -o -name "$pkg-static_*.deb" \) -type f -print0 | xargs -0r mv -t debs/
+              find output \( -name "${pkg}_*.deb" -o -name "${pkg}-static_*.deb" \) -type f -print0 | xargs -0r mv -t debs/
             done < <(cat "./debs/built_${repo}_packages.txt")
           fi
         done
