@@ -1,0 +1,93 @@
+name: Build and Publish command-not-found
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - layer-ide-main
+    paths:
+      - 'packages/command-not-found/**'
+
+permissions: {}
+
+jobs:
+  build:
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        target_arch: [aarch64, arm]
+      fail-fast: false
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+
+      - name: Enable zram
+        uses: ./.github/actions/zram
+        with:
+          algorithm: zstd
+          size: 16G
+          priority: 100
+          device_name: /dev/zram0
+
+      - name: Build command-not-found
+        run: |
+          mkdir -p debs
+          ./scripts/run-docker.sh -d ./build-package.sh -I -C \
+            -a "${{ matrix.target_arch }}" \
+            command-not-found
+
+      - name: Collect debs
+        run: |
+          find output -name "command-not-found_*.deb" -exec cp {} debs/ \;
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: command-not-found-${{ matrix.target_arch }}-${{ github.sha }}
+          path: debs/*.deb
+
+  publish:
+    needs: build
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    if: github.repository == 'YatoNorai/termux-packages'
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: debs/
+
+      - name: Upload to APT repository (add only, no delete)
+        env:
+          REPOSITORY_URL: https://packagesyatonorai.duckdns.org/aptly-api
+          REPOSITORY_NAME: termux-main
+          REPOSITORY_DISTRIBUTION: stable
+          GITHUB_SHA: ${{ github.sha }}
+          APTLY_API_AUTH: ${{ secrets.APTLY_API_AUTH }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          source scripts/aptly_api.sh
+
+          echo "=== Uploading command-not-found debs ==="
+          for deb in debs/command-not-found_*.deb; do
+            [ -f "$deb" ] || continue
+            echo "Uploading: $deb"
+            aptly_upload_file "$deb"
+          done
+
+          echo "=== Adding to repository (existing packages preserved) ==="
+          aptly_add_to_repo
+
+          aptly_delete_dir
+
+          echo "=== Publishing updated index ==="
+          aptly_publish_repo
+
+          echo "Done. Only command-not-found was replaced; all other packages are untouched."
