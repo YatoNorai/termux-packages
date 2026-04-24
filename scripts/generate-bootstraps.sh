@@ -295,14 +295,6 @@ create_bootstrap_archive() {
 			repack_zip "$(realpath "$zip")"
 		done < <(find . -type f -name \*.zip -print0)
 
-
-		# Strip all binary files
-		echo "[*] Stripping binaries"
-		find . -type f -exec hexdump -n 4 -e '4/1 "%2x" " {}\n"'  {} \; |\
-			grep ^7f454c46 |\
-			cut -d' ' -f2- |\
-			xargs -L1 "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
-
 		# Create bootstrap ZIP file without compression
 		echo "[*] Creating bootstrap archives"
 		zip -qr0 "$bszip" ./*
